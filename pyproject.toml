@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "secure-cluster-mcp"
+version = "0.1.0"
+description = "MCP server for safe HPC cluster interactions with guardrails"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=0.4.0",
+    "paramiko>=3.4.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+secure-cluster-mcp = "secure_cluster_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/secure_cluster_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
