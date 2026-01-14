@@ -4,7 +4,7 @@ MCP server for safe HPC cluster interactions with guardrails.
 
 ## Prerequisites
 
-- Python 3.12+
+- Python 3.11+
 - SSH access to your cluster (key-based authentication)
 - SLURM scheduler (sbatch, squeue commands)
 - Network access to cluster (SSH port 22)
