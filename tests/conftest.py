@@ -14,7 +14,7 @@ def setup_test_env(tmp_path):
     # Set required env vars
     os.environ["CLUSTER_HOST"] = "test.cluster.local"
     os.environ["CLUSTER_USER"] = "testuser"
-    os.environ["CLUSTER_PATH"] = "/home/testuser/project"
+    os.environ["REMOTE_BASE_PATH"] = "/home/testuser/project"
     os.environ["DRY_RUN"] = "true"
     os.environ["SSH_KEY_PATH"] = str(tmp_path / "id_rsa")
 

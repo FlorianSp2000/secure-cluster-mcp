@@ -11,7 +11,7 @@ def test_mcp_server_creates():
     """MCP server should create without error."""
     os.environ["CLUSTER_HOST"] = "test.cluster.local"
     os.environ["CLUSTER_USER"] = "testuser"
-    os.environ["CLUSTER_PATH"] = "/home/testuser/project"
+    os.environ["REMOTE_BASE_PATH"] = "/home/testuser/project"
     os.environ["DRY_RUN"] = "true"
 
     # Import should succeed
@@ -25,7 +25,7 @@ def test_mcp_has_expected_tools():
     """MCP server should have all expected tools registered."""
     os.environ["CLUSTER_HOST"] = "test.cluster.local"
     os.environ["CLUSTER_USER"] = "testuser"
-    os.environ["CLUSTER_PATH"] = "/home/testuser/project"
+    os.environ["REMOTE_BASE_PATH"] = "/home/testuser/project"
     os.environ["DRY_RUN"] = "true"
 
     from secure_cluster_mcp.server import mcp

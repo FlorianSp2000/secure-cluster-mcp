@@ -4,7 +4,7 @@ MCP server for safe HPC cluster interactions with guardrails.
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.12+
 - SSH access to your cluster (key-based authentication)
 - SLURM scheduler (sbatch, squeue commands)
 - Network access to cluster (SSH port 22)
@@ -14,7 +14,7 @@ MCP server for safe HPC cluster interactions with guardrails.
 This tool enforces guardrails to prevent cluster abuse:
 - **DRY_RUN=true default** - logs commands without executing
 - **Rate limiting** - max 30 commands per 5 minutes
-- **Path validation** - all paths must be under CLUSTER_PATH
+- **Path validation** - all paths must be under REMOTE_BASE_PATH
 - **Dangerous command blocklist** - blocks `rm -rf`, `mkfs`, fork bombs, etc.
 
 **Set DRY_RUN=false only after reviewing what commands would execute.**
@@ -41,16 +41,16 @@ cp .env.example .env
 
 **Required settings:**
 ```bash
-CLUSTER_HOST=your.cluster.ip      # Cluster IP or hostname
-CLUSTER_USER=your_username        # Your cluster username
-CLUSTER_PATH=/path/to/project/    # Remote working directory
-SSH_KEY_PATH=~/.ssh/id_rsa        # Path to SSH private key
+CLUSTER_HOST=your.cluster.ip           # Cluster IP or hostname
+CLUSTER_USER=your_username             # Your cluster username
+REMOTE_BASE_PATH=/home/user/project/   # Your working directory on cluster
+SSH_KEY_PATH=~/.ssh/your_key           # Path to SSH private key
 ```
 
 **Optional settings:**
 ```bash
 DRY_RUN=true                      # Safety mode (default: true)
-LOG_DIR=logs                      # Log directory relative to CLUSTER_PATH
+LOG_DIR=logs                      # Log subdirectory for job output (default: logs)
 RATE_LIMIT_COMMANDS=30            # Max commands per window
 RATE_LIMIT_WINDOW_SECONDS=300     # Rate limit window (5 min)
 LOG_TAIL_LINES=200                # Default lines to read from logs
@@ -58,7 +58,7 @@ LOG_TAIL_LINES=200                # Default lines to read from logs
 
 ## Claude Code Integration
 
-Add to `~/.claude.json`:
+Add to `~/.claude/settings.json` or `.claude/settings.local.json`:
 ```json
 {
   "mcpServers": {
@@ -85,16 +85,30 @@ Add to `~/.claude.json`:
 | `search_logs` | Grep across log files for patterns |
 | `run_remote_command` | Execute command on login node |
 
+### Notes on `read_logs` and `search_logs`
+
+These tools can read **any file** under `REMOTE_BASE_PATH`, not just logs:
+
+```bash
+# By job ID - uses LOG_DIR (convenient for SLURM output)
+read_logs("12345")  # → {REMOTE_BASE_PATH}/{LOG_DIR}/12345.out
+
+# By full path - reads any file under REMOTE_BASE_PATH
+read_logs("/home/user/project/results/output.csv")
+```
+
+`LOG_DIR` is just a convenience default for the common case of reading SLURM job logs.
+
 ## Troubleshooting
 
 ### "Connection refused" or timeout
-- Verify SSH access: `ssh -i ~/.ssh/id_rsa user@host`
+- Verify SSH access works: `ssh user@cluster_host`
 - Check VPN connection if required
-- Ensure SSH key has correct permissions: `chmod 600 ~/.ssh/id_rsa`
+- Ensure SSH key has correct permissions: `chmod 600 ~/.ssh/your_key`
 
-### "Path not under CLUSTER_PATH"
-- All remote paths must be under the configured CLUSTER_PATH
-- Check CLUSTER_PATH in your .env ends with `/`
+### "Path not under REMOTE_BASE_PATH"
+- All remote paths must be under the configured REMOTE_BASE_PATH
+- Check REMOTE_BASE_PATH in your .env is correct
 
 ### "Rate limit exceeded"
 - Wait 5 minutes or adjust RATE_LIMIT_COMMANDS
@@ -122,12 +136,6 @@ git clone https://github.com/FlorianSp2000/secure-cluster-mcp.git
 cd secure-cluster-mcp
 uv sync --extra dev
 uv run pytest -v
-```
-
-## Building
-
-```bash
-uv build
 ```
 
 ## License

@@ -66,9 +66,9 @@ def is_dry_run() -> bool:
     return get_settings().dry_run
 
 
-def get_cluster_path() -> str:
-    """Get CLUSTER_PATH with trailing slash stripped."""
-    return get_settings().cluster_path.rstrip("/")
+def get_remote_base_path() -> str:
+    """Get REMOTE_BASE_PATH with trailing slash stripped."""
+    return get_settings().remote_base_path.rstrip("/")
 
 
 def poll_until_complete(
@@ -129,7 +129,7 @@ def cluster_info() -> str:
     return f"""Cluster Connection:
   Host: {settings.cluster_host}
   User: {settings.cluster_user}
-  Path: {settings.cluster_path}
+  Path: {settings.remote_base_path}
 
 Mode:
   DRY_RUN: {settings.dry_run}
@@ -144,12 +144,12 @@ Guardrails:
 def transfer_file(local_path: str, remote_path: str) -> str:
     """Transfer a local file to the cluster.
 
-    SAFETY: Validates local file exists, remote path is under CLUSTER_PATH,
+    SAFETY: Validates local file exists, remote path is under REMOTE_BASE_PATH,
     and rate limits are not exceeded.
 
     Args:
         local_path: Absolute path to local file
-        remote_path: Destination path on cluster (must be under CLUSTER_PATH)
+        remote_path: Destination path on cluster (must be under REMOTE_BASE_PATH)
 
     Returns:
         Confirmation message or error
@@ -162,10 +162,10 @@ def transfer_file(local_path: str, remote_path: str) -> str:
 def submit_job(script_path: str) -> str:
     """Submit a SLURM job using sbatch.
 
-    SAFETY: Path must be under CLUSTER_PATH. MCP requires user permission for each call.
+    SAFETY: Path must be under REMOTE_BASE_PATH. MCP requires user permission for each call.
 
     Args:
-        script_path: Path to sbatch script on cluster (must be under CLUSTER_PATH)
+        script_path: Path to sbatch script on cluster (must be under REMOTE_BASE_PATH)
 
     Returns:
         Job ID if successful, error message otherwise
@@ -257,7 +257,7 @@ def read_logs(job_id_or_path: str, log_type: str = "out", lines: int = 200) -> s
     else:
         ext = "err" if log_type == "err" else "out"
         log_dir = get_settings().log_dir
-        log_path = f"{get_cluster_path()}/{log_dir}/{job_id_or_path}.{ext}"
+        log_path = f"{get_remote_base_path()}/{log_dir}/{job_id_or_path}.{ext}"
 
     ssh = get_ssh_client()
 
@@ -286,7 +286,7 @@ def list_remote(
 ) -> str:
     """List files in a remote directory with filtering.
 
-    SAFETY: Path must be under CLUSTER_PATH.
+    SAFETY: Path must be under REMOTE_BASE_PATH.
 
     Args:
         path: Remote directory path to list
@@ -330,10 +330,10 @@ def list_remote(
 def download_file(remote_path: str, local_path: str) -> str:
     """Download file from cluster to local machine.
 
-    SAFETY: Remote path must be under CLUSTER_PATH.
+    SAFETY: Remote path must be under REMOTE_BASE_PATH.
 
     Args:
-        remote_path: Path on cluster (must be under CLUSTER_PATH)
+        remote_path: Path on cluster (must be under REMOTE_BASE_PATH)
         local_path: Local destination path
 
     Returns:
@@ -353,12 +353,12 @@ def search_logs(
 ) -> str:
     """Search log files for pattern using grep.
 
-    SAFETY: Read-only. Path must be under CLUSTER_PATH. Output truncated.
+    SAFETY: Read-only. Path must be under REMOTE_BASE_PATH. Output truncated.
 
     Args:
         pattern: Regex pattern to search (e.g., "Error|Exception|Traceback")
         file_pattern: File glob (default "*.err")
-        path: Directory to search (default: CLUSTER_PATH/logs)
+        path: Directory to search (default: REMOTE_BASE_PATH/logs)
         context_lines: Lines before/after match (default 2, max 10)
         max_matches: Max matching lines returned (default 100, max 500)
 
@@ -374,7 +374,7 @@ def search_logs(
         max_matches = 500
 
     log_dir = get_settings().log_dir
-    search_path = path if path else f"{get_cluster_path()}/{log_dir}"
+    search_path = path if path else f"{get_remote_base_path()}/{log_dir}"
     validated = validate_remote_path(search_path)
 
     if is_dry_run():
@@ -471,7 +471,7 @@ def main():
 
     logger.info("Starting secure-cluster-mcp server")
     logger.info(f"  Cluster: {settings.cluster_user}@{settings.cluster_host}")
-    logger.info(f"  Path: {settings.cluster_path}")
+    logger.info(f"  Path: {settings.remote_base_path}")
     logger.info(f"  DRY_RUN: {settings.dry_run}")
     logger.info(f"  Rate limit: {settings.rate_limit_commands}/{settings.rate_limit_window_seconds}s")
 

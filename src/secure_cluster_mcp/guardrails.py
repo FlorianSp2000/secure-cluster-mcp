@@ -21,7 +21,7 @@ class GuardrailError(Exception):
 
 
 class PathValidationError(GuardrailError):
-    """Raised when path is not under CLUSTER_PATH."""
+    """Raised when path is not under REMOTE_BASE_PATH."""
 
     pass
 
@@ -33,7 +33,7 @@ class RateLimitError(GuardrailError):
 
 
 def validate_remote_path(path: str) -> str:
-    """Validate remote path is under CLUSTER_PATH.
+    """Validate remote path is under REMOTE_BASE_PATH.
 
     Args:
         path: Remote path to validate
@@ -42,10 +42,10 @@ def validate_remote_path(path: str) -> str:
         Normalized path if valid
 
     Raises:
-        PathValidationError: If path is not under CLUSTER_PATH
+        PathValidationError: If path is not under REMOTE_BASE_PATH
     """
     settings = get_settings()
-    cluster_path = settings.cluster_path.rstrip("/")
+    remote_base_path = settings.remote_base_path.rstrip("/")
 
     # Basic validation
     if not path or not path.strip():
@@ -70,10 +70,10 @@ def validate_remote_path(path: str) -> str:
 
     normalized = "/" + "/".join(parts)
 
-    # Must be under CLUSTER_PATH (after normalization)
-    if not (normalized == cluster_path or normalized.startswith(cluster_path + "/")):
+    # Must be under REMOTE_BASE_PATH (after normalization)
+    if not (normalized == remote_base_path or normalized.startswith(remote_base_path + "/")):
         raise PathValidationError(
-            f"Path '{path}' is not under CLUSTER_PATH '{cluster_path}'. "
+            f"Path '{path}' is not under REMOTE_BASE_PATH '{remote_base_path}'. "
             "This is a safety guardrail to prevent writing to wrong locations."
         )
 

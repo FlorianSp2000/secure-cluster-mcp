@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # Required cluster connection
     cluster_host: str = Field(..., description="Cluster IP or hostname")
     cluster_user: str = Field(..., description="SSH username")
-    cluster_path: str = Field(..., description="Remote project root path")
+    remote_base_path: str = Field(..., description="Remote project root path")
 
     # Required - no default, user must specify
     ssh_key_path: Path = Field(..., description="Path to SSH private key")
@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     rate_limit_commands: int = Field(default=30, description="Max commands per window")
     rate_limit_window_seconds: int = Field(default=300, description="Rate limit window (5 min)")
     log_tail_lines: int = Field(default=200, description="Default lines to read from logs")
-    log_dir: str = Field(default="logs", description="Log directory relative to CLUSTER_PATH")
+    log_dir: str = Field(default="logs", description="Log directory relative to REMOTE_BASE_PATH")
 
     # State persistence
     state_dir: Path = Field(
@@ -57,10 +57,10 @@ class Settings(BaseSettings):
             raise ValueError("CLUSTER_HOST is required")
         if not self.cluster_user:
             raise ValueError("CLUSTER_USER is required")
-        if not self.cluster_path:
-            raise ValueError("CLUSTER_PATH is required")
-        if not self.cluster_path.startswith("/"):
-            raise ValueError("CLUSTER_PATH must be absolute path")
+        if not self.remote_base_path:
+            raise ValueError("REMOTE_BASE_PATH is required")
+        if not self.remote_base_path.startswith("/"):
+            raise ValueError("REMOTE_BASE_PATH must be absolute path")
         if not self.ssh_key_path or not self.ssh_key_path.exists():
             raise ValueError(f"SSH_KEY_PATH is required and must exist: {self.ssh_key_path}")
 

@@ -54,14 +54,14 @@ class TestPathValidation:
     """Tests for path validation in SSH client."""
 
     def test_upload_rejects_invalid_remote_path(self, temp_local_file):
-        """upload_file should reject paths outside CLUSTER_PATH."""
+        """upload_file should reject paths outside REMOTE_BASE_PATH."""
         os.environ["DRY_RUN"] = "true"
 
         ssh = ClusterSSH()
         with pytest.raises(Exception) as exc:
             ssh.upload_file(str(temp_local_file), "/etc/passwd")
 
-        assert "not under CLUSTER_PATH" in str(exc.value)
+        assert "not under REMOTE_BASE_PATH" in str(exc.value)
 
     def test_upload_rejects_missing_local_file(self):
         """upload_file should reject nonexistent local files."""
@@ -72,14 +72,14 @@ class TestPathValidation:
             ssh.upload_file("/nonexistent/file.txt", "/home/testuser/project/dest.txt")
 
     def test_list_directory_rejects_invalid_path(self):
-        """list_directory should reject paths outside CLUSTER_PATH."""
+        """list_directory should reject paths outside REMOTE_BASE_PATH."""
         os.environ["DRY_RUN"] = "true"
 
         ssh = ClusterSSH()
         with pytest.raises(Exception) as exc:
             ssh.list_directory("/var/log")
 
-        assert "not under CLUSTER_PATH" in str(exc.value)
+        assert "not under REMOTE_BASE_PATH" in str(exc.value)
 
 
 class TestCommandResult:

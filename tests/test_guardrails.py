@@ -17,20 +17,20 @@ class TestPathValidation:
     """Tests for path validation."""
 
     def test_valid_path_under_cluster_path(self):
-        """Valid path under CLUSTER_PATH should pass."""
+        """Valid path under REMOTE_BASE_PATH should pass."""
         result = validate_remote_path("/home/testuser/project/src/file.py")
         assert result == "/home/testuser/project/src/file.py"
 
     def test_valid_path_exact_cluster_path(self):
-        """Exact CLUSTER_PATH should pass."""
+        """Exact REMOTE_BASE_PATH should pass."""
         result = validate_remote_path("/home/testuser/project")
         assert result == "/home/testuser/project"
 
     def test_invalid_path_outside_cluster_path(self):
-        """Path outside CLUSTER_PATH should fail."""
+        """Path outside REMOTE_BASE_PATH should fail."""
         with pytest.raises(PathValidationError) as exc:
             validate_remote_path("/home/otheruser/data")
-        assert "not under CLUSTER_PATH" in str(exc.value)
+        assert "not under REMOTE_BASE_PATH" in str(exc.value)
 
     def test_invalid_relative_path(self):
         """Relative path should fail."""
@@ -45,7 +45,7 @@ class TestPathValidation:
         assert "cannot be empty" in str(exc.value)
 
     def test_path_traversal_attack(self):
-        """Path traversal should not escape CLUSTER_PATH validation."""
+        """Path traversal should not escape REMOTE_BASE_PATH validation."""
         # This path looks like it's under cluster path but tries to escape
         with pytest.raises(PathValidationError):
             validate_remote_path("/home/testuser/project/../../../etc/passwd")
