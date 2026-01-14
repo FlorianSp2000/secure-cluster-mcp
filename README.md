@@ -2,27 +2,30 @@
 
 MCP server for safe HPC cluster interactions with guardrails.
 
-## SAFETY FIRST
+## Safety First
 
 This tool enforces guardrails to prevent cluster abuse:
 - **DRY_RUN=true default** - logs commands without executing
 - **Rate limiting** - max 30 commands per 5 minutes
-- **Job limits** - max 5 concurrent jobs
 - **Path validation** - all paths must be under CLUSTER_PATH
-- **Log truncation** - tail 100 lines only, never full files
+- **Dangerous command blocklist** - blocks `rm -rf`, `mkfs`, fork bombs, etc.
 
 **Set DRY_RUN=false only after reviewing what commands would execute.**
 
-## Install
+## Installation
 
 ```bash
+# With uv (recommended)
 uv sync
+
+# With pip
+pip install -e .
 ```
 
-## Config (.env)
+## Configuration (.env)
 
-**All required - no defaults:**
-```
+**Required:**
+```bash
 CLUSTER_HOST=your.cluster.ip
 CLUSTER_USER=username
 CLUSTER_PATH=/remote/project/root/
@@ -30,7 +33,7 @@ SSH_KEY_PATH=/path/to/your/ssh/key
 ```
 
 **Optional:**
-```
+```bash
 DRY_RUN=true  # default true, set false for real execution
 ```
 
@@ -52,22 +55,30 @@ Add to `~/.claude.json`:
 
 | Tool | Description |
 |------|-------------|
-| `transfer_file` | Upload local file to cluster (validates path) |
-| `submit_job` | Submit sbatch script (enforces job limit) |
+| `cluster_info` | Show connection info and settings |
+| `transfer_file` | Upload local file to cluster |
+| `download_file` | Download file from cluster to local |
+| `submit_job` | Submit sbatch script |
 | `check_queue` | List user's jobs in SLURM queue |
 | `poll_job` | Wait for job completion |
-| `read_logs` | Read job stdout/stderr (tail only) |
-| `list_remote` | List remote directory |
+| `read_logs` | Read job stdout/stderr (tail) |
+| `list_remote` | List remote directory with filtering |
+| `search_logs` | Grep across log files for patterns |
+| `run_remote_command` | Execute command on login node |
 
-## Run Standalone
-
-```bash
-uv run secure-cluster-mcp
-```
-
-## Dev
+## Development
 
 ```bash
 uv sync --extra dev
 uv run pytest -v
 ```
+
+## Building
+
+```bash
+uv build
+```
+
+## License
+
+MIT

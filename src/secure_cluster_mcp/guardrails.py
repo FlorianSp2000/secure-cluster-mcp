@@ -32,12 +32,6 @@ class RateLimitError(GuardrailError):
     pass
 
 
-class JobLimitError(GuardrailError):
-    """Raised when job limit exceeded."""
-
-    pass
-
-
 def validate_remote_path(path: str) -> str:
     """Validate remote path is under CLUSTER_PATH.
 
@@ -91,13 +85,11 @@ class PersistentState:
     """State that persists across MCP restarts."""
 
     command_timestamps: list[float] = field(default_factory=list)
-    active_job_ids: list[str] = field(default_factory=list)
     last_updated: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict:
         return {
             "command_timestamps": self.command_timestamps,
-            "active_job_ids": self.active_job_ids,
             "last_updated": self.last_updated,
         }
 
@@ -105,7 +97,6 @@ class PersistentState:
     def from_dict(cls, data: dict) -> "PersistentState":
         return cls(
             command_timestamps=data.get("command_timestamps", []),
-            active_job_ids=data.get("active_job_ids", []),
             last_updated=data.get("last_updated", time.time()),
         )
 
@@ -198,55 +189,9 @@ class RateLimiter:
         self.record()
 
 
-class JobLimiter:
-    """Limits concurrent jobs submitted by agent.
-
-    SAFETY: Prevents flooding cluster queue.
-    """
-
-    def __init__(self, state_manager: StateManager):
-        self.state_manager = state_manager
-        settings = get_settings()
-        self.max_jobs = settings.max_concurrent_jobs
-
-    def check(self, current_job_count: int) -> None:
-        """Check if another job can be submitted.
-
-        Args:
-            current_job_count: Current number of user's jobs from squeue
-
-        Raises:
-            JobLimitError: If job limit exceeded
-        """
-        if current_job_count >= self.max_jobs:
-            raise JobLimitError(
-                f"Job limit exceeded: {current_job_count} jobs running (max {self.max_jobs}). "
-                "Wait for jobs to complete before submitting more."
-            )
-
-    def track_job(self, job_id: str) -> None:
-        """Track a submitted job."""
-        state = self.state_manager.load()
-        if job_id not in state.active_job_ids:
-            state.active_job_ids.append(job_id)
-            self.state_manager.save()
-
-    def untrack_job(self, job_id: str) -> None:
-        """Remove completed job from tracking."""
-        state = self.state_manager.load()
-        if job_id in state.active_job_ids:
-            state.active_job_ids.remove(job_id)
-            self.state_manager.save()
-
-    def get_tracked_jobs(self) -> list[str]:
-        """Get list of tracked job IDs."""
-        return self.state_manager.load().active_job_ids.copy()
-
-
 # Module-level instances (lazy initialized)
 _state_manager: StateManager | None = None
 _rate_limiter: RateLimiter | None = None
-_job_limiter: JobLimiter | None = None
 
 
 def get_state_manager() -> StateManager:
@@ -263,18 +208,10 @@ def get_rate_limiter() -> RateLimiter:
     return _rate_limiter
 
 
-def get_job_limiter() -> JobLimiter:
-    global _job_limiter
-    if _job_limiter is None:
-        _job_limiter = JobLimiter(get_state_manager())
-    return _job_limiter
-
-
 def reset_guardrails() -> None:
     """Reset all guardrails (for testing)."""
-    global _state_manager, _rate_limiter, _job_limiter
+    global _state_manager, _rate_limiter
     if _state_manager is not None:
         _state_manager.clear()
     _state_manager = None
     _rate_limiter = None
-    _job_limiter = None

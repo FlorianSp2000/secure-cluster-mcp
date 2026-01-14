@@ -7,13 +7,34 @@ name = "secure-cluster-mcp"
 version = "0.1.0"
 description = "MCP server for safe HPC cluster interactions with guardrails"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
+authors = [
+    { name = "Florian Sp" }
+]
+keywords = ["mcp", "hpc", "cluster", "slurm", "ssh", "guardrails"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Clustering",
+]
 dependencies = [
     "fastmcp>=0.4.0",
     "paramiko>=3.4.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/fkrones/secure-cluster-mcp"
+Repository = "https://github.com/fkrones/secure-cluster-mcp"
+Issues = "https://github.com/fkrones/secure-cluster-mcp/issues"
 
 [project.optional-dependencies]
 dev = [

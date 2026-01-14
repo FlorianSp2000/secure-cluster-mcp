@@ -220,26 +220,17 @@ class ClusterSSH:
     def read_remote_file_tail(self, remote_path: str, lines: int | None = None) -> str:
         """Read tail of remote file.
 
-        SAFETY:
-        - Validates path under CLUSTER_PATH
-        - Limits lines to configured max
-        - Respects DRY_RUN
-
         Args:
             remote_path: Remote file path
-            lines: Number of lines (defaults to config max)
+            lines: Number of lines (defaults to config value)
 
         Returns:
             File content (tail)
         """
         validated_remote = validate_remote_path(remote_path)
-        max_lines = lines or self.settings.log_tail_lines
+        num_lines = lines if lines is not None else self.settings.log_tail_lines
 
-        # Cap at configured maximum
-        if max_lines > self.settings.log_tail_lines:
-            max_lines = self.settings.log_tail_lines
-
-        result = self.exec_command(f"tail -n {max_lines} {validated_remote}")
+        result = self.exec_command(f"tail -n {num_lines} {validated_remote}")
         return result.stdout
 
     def list_directory(self, remote_path: str) -> str:

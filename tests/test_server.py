@@ -30,16 +30,20 @@ def test_mcp_has_expected_tools():
 
     from secure_cluster_mcp.server import mcp
 
-    # Get tool names - FastMCP stores tools internally
-    # The tools are registered via decorators
+    # Expected tools (10 total)
     tool_names = {
+        "cluster_info",
         "transfer_file",
         "submit_job",
         "check_queue",
         "poll_job",
         "read_logs",
         "list_remote",
+        "download_file",
+        "search_logs",
+        "run_remote_command",
     }
 
     # Just verify server was created - tools are registered via decorators
     assert mcp is not None
+    assert len(tool_names) == 10

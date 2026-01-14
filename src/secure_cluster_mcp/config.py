@@ -38,8 +38,7 @@ class Settings(BaseSettings):
     # Guardrail limits
     rate_limit_commands: int = Field(default=30, description="Max commands per window")
     rate_limit_window_seconds: int = Field(default=300, description="Rate limit window (5 min)")
-    max_concurrent_jobs: int = Field(default=5, description="Max jobs agent can have running")
-    log_tail_lines: int = Field(default=100, description="Max lines to read from logs")
+    log_tail_lines: int = Field(default=200, description="Default lines to read from logs")
 
     # State persistence
     state_dir: Path = Field(
