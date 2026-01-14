@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     rate_limit_commands: int = Field(default=30, description="Max commands per window")
     rate_limit_window_seconds: int = Field(default=300, description="Rate limit window (5 min)")
     log_tail_lines: int = Field(default=200, description="Default lines to read from logs")
+    log_dir: str = Field(default="logs", description="Log directory relative to CLUSTER_PATH")
 
     # State persistence
     state_dir: Path = Field(

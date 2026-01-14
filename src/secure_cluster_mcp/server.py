@@ -256,7 +256,8 @@ def read_logs(job_id_or_path: str, log_type: str = "out", lines: int = 200) -> s
         log_path = job_id_or_path
     else:
         ext = "err" if log_type == "err" else "out"
-        log_path = f"{get_cluster_path()}/logs/{job_id_or_path}.{ext}"
+        log_dir = get_settings().log_dir
+        log_path = f"{get_cluster_path()}/{log_dir}/{job_id_or_path}.{ext}"
 
     ssh = get_ssh_client()
 
@@ -372,7 +373,8 @@ def search_logs(
     if max_matches > 500:
         max_matches = 500
 
-    search_path = path if path else f"{get_cluster_path()}/logs"
+    log_dir = get_settings().log_dir
+    search_path = path if path else f"{get_cluster_path()}/{log_dir}"
     validated = validate_remote_path(search_path)
 
     if is_dry_run():
