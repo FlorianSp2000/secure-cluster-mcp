@@ -71,7 +71,7 @@ def get_remote_base_path() -> str:
     return get_settings().remote_base_path.rstrip("/")
 
 
-def poll_until_complete(
+async def poll_until_complete(
     check_fn: Callable[[], str | None],
     interval_seconds: int = 10,
     max_attempts: int = 60,
@@ -108,7 +108,7 @@ def poll_until_complete(
             return f"finished with status: {status}"
 
         logger.info(f"Status: {status} (attempt {attempt + 1}/{max_attempts})")
-        asyncio.get_event_loop().run_until_complete(asyncio.sleep(interval_seconds))
+        await asyncio.sleep(interval_seconds)
 
     return f"still running after {max_attempts} attempts. Last status: {status}"
 
@@ -210,7 +210,7 @@ def check_queue() -> str:
 
 @mcp.tool()
 @handle_tool_errors
-def poll_job(job_id: str, interval_seconds: int = 10, max_attempts: int = 60) -> str:
+async def poll_job(job_id: str, interval_seconds: int = 10, max_attempts: int = 60) -> str:
     """Poll job status until completion.
 
     SAFETY: Limited to 60 attempts (10 min default) to prevent infinite loops.
@@ -234,7 +234,7 @@ def poll_job(job_id: str, interval_seconds: int = 10, max_attempts: int = 60) ->
         status = output.strip()
         return status if status else None
 
-    result = poll_until_complete(check_status, interval_seconds, max_attempts)
+    result = await poll_until_complete(check_status, interval_seconds, max_attempts)
     return f"Job {job_id} {result}"
 
 
