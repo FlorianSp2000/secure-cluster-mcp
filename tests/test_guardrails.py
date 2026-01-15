@@ -32,11 +32,15 @@ class TestPathValidation:
             validate_remote_path("/home/otheruser/data")
         assert "not under REMOTE_BASE_PATH" in str(exc.value)
 
-    def test_invalid_relative_path(self):
-        """Relative path should fail."""
-        with pytest.raises(PathValidationError) as exc:
-            validate_remote_path("relative/path")
-        assert "must be absolute" in str(exc.value)
+    def test_valid_relative_path(self):
+        """Relative path should resolve to REMOTE_BASE_PATH."""
+        result = validate_remote_path("subdir/file.txt")
+        assert result == "/home/testuser/project/subdir/file.txt"
+
+    def test_relative_path_traversal_blocked(self):
+        """Relative path with .. escaping should fail."""
+        with pytest.raises(PathValidationError):
+            validate_remote_path("../../../etc/passwd")
 
     def test_invalid_empty_path(self):
         """Empty path should fail."""

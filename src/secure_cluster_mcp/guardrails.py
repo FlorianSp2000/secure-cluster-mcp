@@ -33,38 +33,41 @@ class RateLimitError(GuardrailError):
 
 
 def validate_remote_path(path: str) -> str:
-    """Validate remote path is under REMOTE_BASE_PATH.
+    """Validate and resolve remote path under REMOTE_BASE_PATH.
+
+    Accepts:
+        - Relative paths: resolved relative to REMOTE_BASE_PATH
+        - Absolute paths: validated to be under REMOTE_BASE_PATH
 
     Args:
-        path: Remote path to validate
+        path: Remote path (relative or absolute)
 
     Returns:
-        Normalized path if valid
+        Normalized absolute path under REMOTE_BASE_PATH
 
     Raises:
-        PathValidationError: If path is not under REMOTE_BASE_PATH
+        PathValidationError: If path escapes REMOTE_BASE_PATH
     """
     settings = get_settings()
     remote_base_path = settings.remote_base_path.rstrip("/")
 
-    # Basic validation
     if not path or not path.strip():
         raise PathValidationError("Path cannot be empty")
 
-    # Must be absolute
-    if not path.startswith("/"):
-        raise PathValidationError(f"Path must be absolute: {path}")
+    # Resolve relative paths to REMOTE_BASE_PATH
+    if path.startswith("/"):
+        full_path = path
+    else:
+        full_path = f"{remote_base_path}/{path}"
 
     # Normalize path - resolve .. and . components
-    # Split into parts, process each
     parts = []
-    for part in path.split("/"):
+    for part in full_path.split("/"):
         if part == "" or part == ".":
             continue
         if part == "..":
             if parts:
                 parts.pop()
-            # else: at root, ignore
         else:
             parts.append(part)
 
@@ -73,8 +76,8 @@ def validate_remote_path(path: str) -> str:
     # Must be under REMOTE_BASE_PATH (after normalization)
     if not (normalized == remote_base_path or normalized.startswith(remote_base_path + "/")):
         raise PathValidationError(
-            f"Path '{path}' is not under REMOTE_BASE_PATH '{remote_base_path}'. "
-            "This is a safety guardrail to prevent writing to wrong locations."
+            f"Path '{path}' resolves to '{normalized}' which is not under "
+            f"REMOTE_BASE_PATH '{remote_base_path}'"
         )
 
     return normalized

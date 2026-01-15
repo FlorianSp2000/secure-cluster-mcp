@@ -1,37 +1,34 @@
-"""Tests for MCP server module.
+"""Tests for MCP server module."""
 
-Note: Core business logic is tested in test_guardrails.py and test_ssh_client.py.
-These tests verify the MCP server initializes correctly.
-"""
-
+import asyncio
 import os
 
+import pytest
 
-def test_mcp_server_creates():
-    """MCP server should create without error."""
+
+@pytest.fixture(autouse=True)
+def setup_env():
+    """Set required env vars for all tests."""
     os.environ["CLUSTER_HOST"] = "test.cluster.local"
     os.environ["CLUSTER_USER"] = "testuser"
     os.environ["REMOTE_BASE_PATH"] = "/home/testuser/project"
     os.environ["DRY_RUN"] = "true"
 
-    # Import should succeed
+
+def test_mcp_server_creates():
+    """MCP server should create with correct name."""
     from secure_cluster_mcp.server import mcp
 
     assert mcp is not None
     assert mcp.name == "secure-cluster-mcp"
 
 
-def test_mcp_has_expected_tools():
+@pytest.mark.asyncio
+async def test_mcp_has_expected_tools():
     """MCP server should have all expected tools registered."""
-    os.environ["CLUSTER_HOST"] = "test.cluster.local"
-    os.environ["CLUSTER_USER"] = "testuser"
-    os.environ["REMOTE_BASE_PATH"] = "/home/testuser/project"
-    os.environ["DRY_RUN"] = "true"
-
     from secure_cluster_mcp.server import mcp
 
-    # Expected tools (10 total)
-    tool_names = {
+    expected_tools = {
         "cluster_info",
         "transfer_file",
         "submit_job",
@@ -44,6 +41,6 @@ def test_mcp_has_expected_tools():
         "run_remote_command",
     }
 
-    # Just verify server was created - tools are registered via decorators
-    assert mcp is not None
-    assert len(tool_names) == 10
+    registered_tools = set(await mcp.get_tools())
+
+    assert registered_tools == expected_tools
