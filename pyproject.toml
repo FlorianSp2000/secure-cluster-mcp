@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "secure-cluster-mcp"
 version = "0.1.0"
-description = "MCP server for safe HPC cluster interactions with guardrails"
+description = "MCP server for SLURM cluster interactions enabling end-to-end AI-assisted coding workflows"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
@@ -31,9 +31,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/fkrones/secure-cluster-mcp"
-Repository = "https://github.com/fkrones/secure-cluster-mcp"
-Issues = "https://github.com/fkrones/secure-cluster-mcp/issues"
+Homepage = "https://github.com/FlorianSp2000/secure-cluster-mcp"
+Repository = "https://github.com/FlorianSp2000/secure-cluster-mcp"
+Issues = "https://github.com/FlorianSp2000/secure-cluster-mcp/issues"
 
 [project.optional-dependencies]
 dev = [

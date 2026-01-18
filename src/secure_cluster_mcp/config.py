@@ -31,7 +31,7 @@ class Settings(BaseSettings):
         object.__setattr__(self, "ssh_key_path", self.ssh_key_path.expanduser())
         
     dry_run: bool = Field(
-        default=True,  # SAFETY: Default to dry run
+        default=False,
         description="If true, log commands without executing",
     )
 

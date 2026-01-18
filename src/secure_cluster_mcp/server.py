@@ -16,6 +16,7 @@ from fastmcp import FastMCP
 
 from .config import get_settings
 from .guardrails import GuardrailError, validate_remote_path
+from .prompts import register_prompts
 from .ssh_client import get_ssh_client
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,9 @@ mcp = FastMCP(
     "secure-cluster-mcp",
     instructions="Safe HPC cluster interactions with guardrails. DRY_RUN mode prevents real execution.",
 )
+
+# Register prompts for common workflows
+register_prompts(mcp)
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -149,18 +153,20 @@ def transfer_file(local_path: str, remote_path: str) -> str:
 
 @mcp.tool()
 @handle_tool_errors
-def submit_job(script_path: str) -> str:
+def submit_job(script_path: str, args: str = "") -> str:
     """Submit a SLURM job using sbatch.
 
     Args:
         script_path: Path to sbatch script (must be under REMOTE_BASE_PATH)
+        args: Additional sbatch args (e.g., "--array=0-10", "--partition=gpu")
     """
     validated_path = validate_remote_path(script_path)
+    cmd = f"sbatch {args} {validated_path}".strip()
 
     if is_dry_run():
-        return f"[DRY_RUN] Would submit job: sbatch {validated_path}"
+        return f"[DRY_RUN] Would submit job: {cmd}"
 
-    output = run_command(f"sbatch {validated_path}")
+    output = run_command(cmd)
 
     match = re.search(r"Submitted batch job (\d+)", output)
     if match:
