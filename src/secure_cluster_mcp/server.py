@@ -120,11 +120,7 @@ async def poll_until_complete(
 
 @mcp.tool()
 def cluster_info() -> str:
-    """Show current cluster connection info and settings.
-
-    Returns:
-        Connection details, DRY_RUN status, and guardrail limits
-    """
+    """Show current cluster connection info and settings."""
     settings = get_settings()
     return f"""Cluster Connection:
   Host: {settings.cluster_host}
@@ -144,15 +140,9 @@ Guardrails:
 def transfer_file(local_path: str, remote_path: str) -> str:
     """Transfer a local file to the cluster.
 
-    SAFETY: Validates local file exists, remote path is under REMOTE_BASE_PATH,
-    and rate limits are not exceeded.
-
     Args:
         local_path: Absolute path to local file
-        remote_path: Destination path on cluster (must be under REMOTE_BASE_PATH)
-
-    Returns:
-        Confirmation message or error
+        remote_path: Destination on cluster (must be under REMOTE_BASE_PATH)
     """
     return get_ssh_client().upload_file(local_path, remote_path)
 
@@ -162,13 +152,8 @@ def transfer_file(local_path: str, remote_path: str) -> str:
 def submit_job(script_path: str) -> str:
     """Submit a SLURM job using sbatch.
 
-    SAFETY: Path must be under REMOTE_BASE_PATH. MCP requires user permission for each call.
-
     Args:
-        script_path: Path to sbatch script on cluster (must be under REMOTE_BASE_PATH)
-
-    Returns:
-        Job ID if successful, error message otherwise
+        script_path: Path to sbatch script (must be under REMOTE_BASE_PATH)
     """
     validated_path = validate_remote_path(script_path)
 
@@ -187,11 +172,7 @@ def submit_job(script_path: str) -> str:
 @mcp.tool()
 @handle_tool_errors
 def check_queue() -> str:
-    """Check SLURM queue for current user's jobs.
-
-    Returns:
-        List of running/pending jobs with status
-    """
+    """Check SLURM queue for current user's jobs."""
     settings = get_settings()
     output = run_command(
         f"squeue -u {settings.cluster_user} --format='%i|%j|%T|%M|%l|%D|%R' --noheader"
@@ -213,15 +194,10 @@ def check_queue() -> str:
 async def poll_job(job_id: str, interval_seconds: int = 10, max_attempts: int = 60) -> str:
     """Poll job status until completion.
 
-    SAFETY: Limited to 60 attempts (10 min default) to prevent infinite loops.
-
     Args:
         job_id: SLURM job ID to monitor
-        interval_seconds: Seconds between checks (default 10)
-        max_attempts: Maximum poll attempts (default 60, max 60)
-
-    Returns:
-        Final job status
+        interval_seconds: Seconds between checks
+        max_attempts: Max attempts (max 60)
     """
     if is_dry_run():
         return f"[DRY_RUN] Would poll job {job_id} every {interval_seconds}s for max {max_attempts} attempts"
@@ -244,13 +220,9 @@ def read_logs(job_id_or_path: str, log_type: str = "out", lines: int = 200) -> s
     """Read job log file (stdout or stderr).
 
     Args:
-        job_id_or_path: Either a job ID (will look in logs/{job_id}.out/.err)
-                        or full path to log file
-        log_type: "out" for stdout, "err" for stderr (ignored if full path given)
-        lines: Number of lines to read (default 200, 0 = full file)
-
-    Returns:
-        Log file content (tail, or full if lines=0)
+        job_id_or_path: Job ID (looks in logs/) or full path
+        log_type: "out" for stdout, "err" for stderr
+        lines: Lines to read (0=full file)
     """
     if "/" in job_id_or_path:
         log_path = job_id_or_path
@@ -279,48 +251,66 @@ def read_logs(job_id_or_path: str, log_type: str = "out", lines: int = 200) -> s
 @handle_tool_errors
 def list_remote(
     path: str,
-    sort_by: str = "time",
-    max_age_minutes: int = 0,
-    limit: int = 50,
     pattern: str = "",
+    mmin: int = 0,
+    mtime: int = 0,
+    max_depth: int = 1,
+    detailed: bool = False,
+    limit: int = 50,
 ) -> str:
-    """List files in a remote directory with filtering.
-
-    SAFETY: Path must be under REMOTE_BASE_PATH.
+    """List files using find with time filtering.
 
     Args:
-        path: Remote directory path to list
-        sort_by: "time" (newest first) or "name" (alphabetical)
-        max_age_minutes: Only show files modified within N minutes (0 = no filter)
-        limit: Maximum entries to return (default 50, 0 = no limit)
-        pattern: Glob pattern filter (e.g., "*.out", "*.err")
+        path: Directory (relative to REMOTE_BASE_PATH)
+        pattern: Glob (e.g., "*.err", "*.out")
+        mmin: Files modified within N minutes (e.g., 360 = last 6 hours)
+        mtime: Files modified within N days (e.g., 1 = last 24 hours)
+        max_depth: Search depth (default 1 = current dir only, 0 = unlimited)
+        detailed: If True, show size + date + filename; if False, filenames only
+        limit: Max files to return (default 50, 0 = unlimited)
 
-    Returns:
-        Directory listing
+    Examples:
+        list_remote("logs", pattern="*.err", mtime=1)  # .err files last 24h
     """
     validated = validate_remote_path(path)
 
-    if max_age_minutes > 0:
-        cmd = f"find {validated} -maxdepth 1 -type f -mmin -{max_age_minutes}"
-        if pattern:
-            cmd += f" -name '{pattern}'"
-        cmd += " -printf '%T@ %p\\n' | sort -rn"
-        if limit > 0:
-            cmd += f" | head -n {limit}"
-        cmd += " | cut -d' ' -f2-"
-    else:
-        sort_flag = "-t" if sort_by == "time" else ""
-        if pattern:
-            cmd = f"ls -la {sort_flag} {validated}/{pattern} 2>/dev/null"
-        else:
-            cmd = f"ls -la {sort_flag} {validated}"
-        if limit > 0:
-            cmd += f" | head -n {limit + 1}"
+    # Build find command
+    cmd_parts = ["find", validated]
 
+    if max_depth > 0:
+        cmd_parts.extend(["-maxdepth", str(max_depth)])
+
+    cmd_parts.extend(["-type", "f"])
+
+    if pattern:
+        cmd_parts.extend(["-name", f"'{pattern}'"])
+
+    if mmin > 0:
+        cmd_parts.extend(["-mmin", f"-{mmin}"])
+    elif mtime > 0:
+        cmd_parts.extend(["-mtime", f"-{mtime}"])
+
+    if detailed:
+        # Date + filename (tab-separated for cut)
+        cmd_parts.append(r"-printf '%T@\t%Tb %Td %TH:%TM\t%f\n'")
+    else:
+        # Filenames only (tab-separated for cut)
+        cmd_parts.append(r"-printf '%T@\t%f\n'")
+
+    # Sort by time (newest first), limit, remove timestamp prefix
+    cmd_parts.append("| sort -rn")
+    if limit > 0:
+        cmd_parts.append(f"| head -n {limit}")
+    cmd_parts.append("| cut -f2-")
+
+    cmd = " ".join(cmd_parts)
     output = run_command(cmd)
 
     if not output.strip():
-        return f"No files found in {validated}" + (f" matching '{pattern}'" if pattern else "")
+        msg = f"No files found in {validated}"
+        if pattern:
+            msg += f" matching '{pattern}'"
+        return msg
 
     return output
 
@@ -330,14 +320,9 @@ def list_remote(
 def download_file(remote_path: str, local_path: str) -> str:
     """Download file from cluster to local machine.
 
-    SAFETY: Remote path must be under REMOTE_BASE_PATH.
-
     Args:
         remote_path: Path on cluster (must be under REMOTE_BASE_PATH)
         local_path: Local destination path
-
-    Returns:
-        Confirmation message or error
     """
     return get_ssh_client().download_file(remote_path, local_path)
 
@@ -349,39 +334,49 @@ def search_logs(
     file_pattern: str = "*.err",
     path: str = "",
     context_lines: int = 2,
-    max_matches: int = 100,
+    mmin: int = 0,
+    mtime: int = 0,
 ) -> str:
-    """Search log files for pattern using grep.
-
-    SAFETY: Read-only. Path must be under REMOTE_BASE_PATH. Output truncated.
+    """Search log files for pattern using find + grep.
 
     Args:
-        pattern: Regex pattern to search (e.g., "Error|Exception|Traceback")
+        pattern: Regex pattern (e.g., "Error|Exception")
         file_pattern: File glob (default "*.err")
-        path: Directory to search (default: REMOTE_BASE_PATH/logs)
-        context_lines: Lines before/after match (default 2, max 10)
-        max_matches: Max matching lines returned (default 100, max 500)
-
-    Returns:
-        Matching lines with context, or "No matches"
+        path: Directory to search (default: logs/)
+        context_lines: Lines before/after match (max 10)
+        mmin: Only files modified within N minutes
+        mtime: Only files modified within N days
     """
     if len(pattern) > 200:
         raise ValueError("Pattern must be <200 chars")
 
     if context_lines > 10:
         context_lines = 10
-    if max_matches > 500:
-        max_matches = 500
 
     log_dir = get_settings().log_dir
     search_path = path if path else f"{get_remote_base_path()}/{log_dir}"
     validated = validate_remote_path(search_path)
 
     if is_dry_run():
-        return f"[DRY_RUN] Would search {validated}/{file_pattern} for: {pattern}"
+        time_filter = ""
+        if mmin > 0:
+            time_filter = f" (last {mmin} min)"
+        elif mtime > 0:
+            time_filter = f" (last {mtime} days)"
+        return f"[DRY_RUN] Would search {validated}/{file_pattern}{time_filter} for: {pattern}"
 
-    # Use grep with context, limit output
-    cmd = f"grep -r -n -C {context_lines} '{pattern}' {validated}/{file_pattern} 2>/dev/null | head -n {max_matches}"
+    # Build find + grep command
+    cmd_parts = ["find", validated, "-type", "f", "-name", f"'{file_pattern}'"]
+
+    if mmin > 0:
+        cmd_parts.extend(["-mmin", f"-{mmin}"])
+    elif mtime > 0:
+        cmd_parts.extend(["-mtime", f"-{mtime}"])
+
+    # -exec grep with context lines, show filename and line numbers
+    cmd_parts.append(f"-exec grep -H -n -C {context_lines} '{pattern}' {{}} +")
+
+    cmd = " ".join(cmd_parts)
     output = run_command(cmd)
 
     if not output.strip():
@@ -417,15 +412,9 @@ DANGEROUS_PATTERNS = [
 def run_remote_command(command: str, timeout_seconds: int = 300) -> str:
     """Execute command on cluster login node.
 
-    SAFETY: Dangerous patterns blocked. MCP requires user permission.
-    Use for: singularity build, module commands, pip install, etc.
-
     Args:
-        command: Command to execute on login node
-        timeout_seconds: Timeout (default 300s, max 600s)
-
-    Returns:
-        Command output (stdout + stderr)
+        command: Command to execute
+        timeout_seconds: Timeout (max 600s)
     """
     if len(command) > 2000:
         raise ValueError("Command must be <2000 chars")
