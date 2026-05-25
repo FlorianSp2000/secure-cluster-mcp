@@ -9,22 +9,51 @@ SAFETY CRITICAL:
 import asyncio
 import logging
 import re
+import shlex
 from functools import wraps
 from typing import Callable, ParamSpec, TypeVar
 
 from fastmcp import FastMCP
 
-from .config import get_settings
+from .config import Settings, get_settings
 from .guardrails import GuardrailError, validate_remote_path
 from .prompts import register_prompts
 from .ssh_client import get_ssh_client
 
 logger = logging.getLogger(__name__)
 
-# Create MCP server
+
+def build_instructions(settings: Settings) -> str:
+    """Build server instructions with actual config values baked in."""
+    return f"""\
+SLURM cluster agent. REMOTE_BASE_PATH={settings.remote_base_path}
+
+ALWAYS call cluster_info() FIRST to see connection settings and DRY_RUN status.
+
+Tool selection order:
+1. cluster_info() → check settings, DRY_RUN status, REMOTE_BASE_PATH
+2. list_remote() / search_logs() → discover files and logs on cluster
+3. transfer_file() / download_file() → move files to/from cluster
+4. submit_job() → launch SLURM jobs (always check_queue() after)
+5. poll_job() / read_logs() → monitor running jobs
+6. run_remote_command() → custom commands NOT covered by other tools
+7. singularity_test() → quick container test on login node (no GPU)
+
+Path rules:
+- Absolute paths: {settings.remote_base_path}/subdir/file
+- Relative paths auto-resolved under {settings.remote_base_path}
+- Log directory: {settings.remote_base_path}/{settings.log_dir}/
+
+Rate limit: max {settings.rate_limit_commands} commands per {settings.rate_limit_window_seconds}s window."""
+
+
+# Load settings at module level — fail fast if .env missing
+_settings = get_settings()
+
+# Create MCP server with actual config baked into instructions
 mcp = FastMCP(
     "secure-cluster-mcp",
-    instructions="Safe HPC cluster interactions with guardrails. DRY_RUN mode prevents real execution.",
+    instructions=build_instructions(_settings),
 )
 
 # Register prompts for common workflows
@@ -122,9 +151,14 @@ async def poll_until_complete(
 # =============================================================================
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
 def cluster_info() -> str:
-    """Show current cluster connection info and settings."""
+    """Show current cluster connection info and settings.
+    USE FIRST in every session to learn REMOTE_BASE_PATH, DRY_RUN status, and rate limits.
+
+    Examples:
+        cluster_info()  # always call before any other tool
+    """
     settings = get_settings()
     return f"""Cluster Connection:
   Host: {settings.cluster_host}
@@ -139,28 +173,42 @@ Guardrails:
   Log tail lines: {settings.log_tail_lines}"""
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @handle_tool_errors
 def transfer_file(local_path: str, remote_path: str) -> str:
     """Transfer a local file to the cluster.
+    USE WHEN user says 'upload', 'send file', 'transfer to cluster'.
 
     Args:
         local_path: Absolute path to local file
         remote_path: Destination on cluster (must be under REMOTE_BASE_PATH)
+
+    Examples:
+        transfer_file("/home/user/train.py", "scripts/train.py")
+        transfer_file("/home/user/model.sbatch", "model.sbatch")
     """
     return get_ssh_client().upload_file(local_path, remote_path)
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @handle_tool_errors
 def submit_job(script_path: str, args: str = "") -> str:
-    """Submit a SLURM job using sbatch.
+    """Submit SLURM job with sbatch.
+    USE WHEN user says 'submit job', 'run script', 'launch experiment'.
+    Always call check_queue() after to verify submission.
 
     Args:
-        script_path: Path to sbatch script (must be under REMOTE_BASE_PATH)
+        script_path: Path to .sbatch script (relative or absolute under REMOTE_BASE_PATH)
         args: Additional sbatch args (e.g., "--array=0-10", "--partition=gpu")
+
+    Examples:
+        submit_job("train.sbatch")                         # basic job
+        submit_job("train.sbatch", "--array=0-9")          # array job
+        submit_job("scripts/eval.sbatch", "--partition=gpu") # specific partition
     """
     validated_path = validate_remote_path(script_path)
+    if args and re.search(r'[;|`\n<>]|\$\(|&&', args):
+        raise GuardrailError(f"sbatch args contain disallowed shell characters: {args!r}")
     cmd = f"sbatch {args} {validated_path}".strip()
 
     if is_dry_run():
@@ -175,10 +223,16 @@ def submit_job(script_path: str, args: str = "") -> str:
     return f"Job submitted but could not parse ID:\n{output}"
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
 @handle_tool_errors
 def check_queue() -> str:
-    """Check SLURM queue for current user's jobs."""
+    """Check SLURM queue for current user's jobs.
+    USE WHEN user says 'check jobs', 'what's running', 'job status'.
+    Always call after submit_job() to verify submission.
+
+    Examples:
+        check_queue()  # shows all user's running/pending jobs
+    """
     settings = get_settings()
     output = run_command(
         f"squeue -u {settings.cluster_user} --format='%i|%j|%T|%M|%l|%D|%R' --noheader"
@@ -195,15 +249,21 @@ def check_queue() -> str:
     return "\n".join(lines)
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @handle_tool_errors
 async def poll_job(job_id: str, interval_seconds: int = 10, max_attempts: int = 60) -> str:
     """Poll job status until completion.
+    USE WHEN user says 'wait for job', 'monitor job', 'watch until done'.
+    Blocks until job finishes or max_attempts reached.
 
     Args:
         job_id: SLURM job ID to monitor
-        interval_seconds: Seconds between checks
+        interval_seconds: Seconds between checks (min 5)
         max_attempts: Max attempts (max 60)
+
+    Examples:
+        poll_job("12345")                    # default 10s interval
+        poll_job("12345", interval_seconds=30, max_attempts=20)  # longer interval
     """
     if is_dry_run():
         return f"[DRY_RUN] Would poll job {job_id} every {interval_seconds}s for max {max_attempts} attempts"
@@ -220,15 +280,22 @@ async def poll_job(job_id: str, interval_seconds: int = 10, max_attempts: int = 
     return f"Job {job_id} {result}"
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
 @handle_tool_errors
 def read_logs(job_id_or_path: str, log_type: str = "out", lines: int = 200) -> str:
     """Read job log file (stdout or stderr).
+    USE WHEN user says 'show logs', 'check output', 'what did job print', 'any errors'.
+    Pass just a job ID to auto-resolve from logs/ dir, or a full path.
 
     Args:
-        job_id_or_path: Job ID (looks in logs/) or full path
+        job_id_or_path: Job ID (looks in logs/) or full path under REMOTE_BASE_PATH
         log_type: "out" for stdout, "err" for stderr
-        lines: Lines to read (0=full file)
+        lines: Lines to read (0=full file, default 200)
+
+    Examples:
+        read_logs("12345")                   # stdout of job 12345
+        read_logs("12345", log_type="err")   # stderr of job 12345
+        read_logs("logs/experiment.out", lines=50)  # last 50 lines of specific file
     """
     if "/" in job_id_or_path:
         log_path = job_id_or_path
@@ -253,7 +320,7 @@ def read_logs(job_id_or_path: str, log_type: str = "out", lines: int = 200) -> s
     return f"=== {log_path} ({label}) ===\n{content}"
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
 @handle_tool_errors
 def list_remote(
     path: str,
@@ -264,19 +331,24 @@ def list_remote(
     detailed: bool = False,
     limit: int = 50,
 ) -> str:
-    """List files using find with time filtering.
+    """List files on cluster using find with time filtering.
+    USE WHEN user says 'list files', 'what's on cluster', 'show logs dir', 'recent files'.
+    Path is relative to REMOTE_BASE_PATH.
 
     Args:
-        path: Directory (relative to REMOTE_BASE_PATH)
-        pattern: Glob (e.g., "*.err", "*.out")
+        path: Directory (relative to REMOTE_BASE_PATH, e.g. "logs", "scripts", ".")
+        pattern: Glob (e.g., "*.err", "*.out", "*.sbatch")
         mmin: Files modified within N minutes (e.g., 360 = last 6 hours)
         mtime: Files modified within N days (e.g., 1 = last 24 hours)
         max_depth: Search depth (default 1 = current dir only, 0 = unlimited)
-        detailed: If True, show size + date + filename; if False, filenames only
+        detailed: If True, show date + filename; if False, filenames only
         limit: Max files to return (default 50, 0 = unlimited)
 
     Examples:
-        list_remote("logs", pattern="*.err", mtime=1)  # .err files last 24h
+        list_remote(".")                                    # top-level files
+        list_remote("logs", pattern="*.err", mtime=1)       # .err files last 24h
+        list_remote("scripts", pattern="*.sbatch")          # all sbatch scripts
+        list_remote("logs", pattern="*.out", mmin=60, detailed=True)  # recent with dates
     """
     validated = validate_remote_path(path)
 
@@ -289,7 +361,7 @@ def list_remote(
     cmd_parts.extend(["-type", "f"])
 
     if pattern:
-        cmd_parts.extend(["-name", f"'{pattern}'"])
+        cmd_parts.extend(["-name", shlex.quote(pattern)])
 
     if mmin > 0:
         cmd_parts.extend(["-mmin", f"-{mmin}"])
@@ -321,19 +393,24 @@ def list_remote(
     return output
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
 @handle_tool_errors
 def download_file(remote_path: str, local_path: str) -> str:
     """Download file from cluster to local machine.
+    USE WHEN user says 'download', 'get file', 'pull from cluster', 'fetch results'.
 
     Args:
-        remote_path: Path on cluster (must be under REMOTE_BASE_PATH)
+        remote_path: Path on cluster (relative or absolute under REMOTE_BASE_PATH)
         local_path: Local destination path
+
+    Examples:
+        download_file("results/output.csv", "/home/user/output.csv")
+        download_file("logs/12345.out", "/tmp/job_log.out")
     """
     return get_ssh_client().download_file(remote_path, local_path)
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": True, "openWorldHint": False})
 @handle_tool_errors
 def search_logs(
     pattern: str,
@@ -344,14 +421,21 @@ def search_logs(
     mtime: int = 0,
 ) -> str:
     """Search log files for pattern using find + grep.
+    USE WHEN user says 'find errors', 'search logs', 'grep for', 'any failures'.
+    Searches logs/ dir by default. Combine with time filters to narrow scope.
 
     Args:
-        pattern: Regex pattern (e.g., "Error|Exception")
+        pattern: Regex pattern (e.g., "Error|Exception", "CUDA|OOM", "accuracy.*0\\.9")
         file_pattern: File glob (default "*.err")
         path: Directory to search (default: logs/)
         context_lines: Lines before/after match (max 10)
         mmin: Only files modified within N minutes
         mtime: Only files modified within N days
+
+    Examples:
+        search_logs("Error|Exception")                           # errors in recent .err files
+        search_logs("OOM|out of memory", mtime=1)                # OOM in last 24h
+        search_logs("accuracy", file_pattern="*.out", mmin=360)  # accuracy in last 6h stdout
     """
     if len(pattern) > 200:
         raise ValueError("Pattern must be <200 chars")
@@ -372,7 +456,7 @@ def search_logs(
         return f"[DRY_RUN] Would search {validated}/{file_pattern}{time_filter} for: {pattern}"
 
     # Build find + grep command
-    cmd_parts = ["find", validated, "-type", "f", "-name", f"'{file_pattern}'"]
+    cmd_parts = ["find", validated, "-type", "f", "-name", shlex.quote(file_pattern)]
 
     if mmin > 0:
         cmd_parts.extend(["-mmin", f"-{mmin}"])
@@ -380,7 +464,7 @@ def search_logs(
         cmd_parts.extend(["-mtime", f"-{mtime}"])
 
     # -exec grep with context lines, show filename and line numbers
-    cmd_parts.append(f"-exec grep -H -n -C {context_lines} '{pattern}' {{}} +")
+    cmd_parts.append(f"-exec grep -H -n -C {context_lines} {shlex.quote(pattern)} {{}} +")
 
     cmd = " ".join(cmd_parts)
     output = run_command(cmd)
@@ -413,14 +497,21 @@ DANGEROUS_PATTERNS = [
 ]
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "openWorldHint": False})
 @handle_tool_errors
 def run_remote_command(command: str, timeout_seconds: int = 300) -> str:
-    """Execute command on cluster login node.
+    """Run custom commands on cluster that are NOT covered by other tools.
+    USE WHEN no other tool fits: singularity build, environment checks etc.
+    NEVER use for sbatch/srun (use submit_job), squeue (use check_queue), or file listing (use list_remote).
+    Dangerous patterns (rm -rf, mkfs, dd, fork bombs) are blocked.
 
     Args:
-        command: Command to execute
+        command: Command to execute (max 2000 chars)
         timeout_seconds: Timeout (max 600s)
+
+    Examples:
+        run_remote_command("singularity build --fakeroot image.sif image.def") # build container image on cluster
+        run_remote_command("singularity exec --nv image.sif python -c 'import torch; print(torch.__version__)'") # check packages in container
     """
     if len(command) > 2000:
         raise ValueError("Command must be <2000 chars")
@@ -447,6 +538,64 @@ def run_remote_command(command: str, timeout_seconds: int = 300) -> str:
     if not result.success:
         return f"Command failed (exit {result.exit_code}):\n{output}"
 
+    return output if output.strip() else "(no output)"
+
+
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": False})
+@handle_tool_errors
+def singularity_test(
+    image: str,
+    command: str,
+    bind_workspace: bool = True,
+    timeout_seconds: int = 30,
+) -> str:
+    """Run quick test in Singularity container on login node.
+    USE WHEN user says 'test container', 'check imports', 'validate environment'.
+    Lightweight debugging only — no GPU, max 60s timeout.
+    Use BEFORE submit_job() to validate code/packages work inside the container.
+
+    Args:
+        image: Path to .sif file (relative to REMOTE_BASE_PATH)
+        command: Command to run inside container
+        bind_workspace: Bind REMOTE_BASE_PATH to /workspace (default: True)
+        timeout_seconds: Max runtime (default 30, max 60)
+
+    Examples:
+        singularity_test("containers/ml.sif", "python -c 'import torch; print(torch.__version__)'")
+        singularity_test("containers/ml.sif", "python -c 'from mymodule import train; print(\"ok\")'")
+        singularity_test("containers/ml.sif", "pip list | grep numpy")
+    """
+    validated_image = validate_remote_path(image)
+
+    if len(command) > 2000:
+        raise ValueError("Command must be <2000 chars")
+
+    cmd_lower = command.lower()
+    for dp in DANGEROUS_PATTERNS:
+        if dp in cmd_lower:
+            raise GuardrailError(f"Blocked dangerous pattern: '{dp}'")
+
+    # Cap timeout for login node safety
+    if timeout_seconds > 60:
+        timeout_seconds = 60
+
+    # Build command (NO --nv flag - login node has no GPU)
+    base_path = get_remote_base_path()
+
+    if bind_workspace:
+        cmd = f"timeout {timeout_seconds} singularity exec -B {base_path}:/workspace {validated_image} {command}"
+    else:
+        cmd = f"timeout {timeout_seconds} singularity exec {validated_image} {command}"
+
+    if is_dry_run():
+        return f"[DRY_RUN] Would run: {cmd}"
+
+    result = get_ssh_client().exec_command(cmd)
+    output = result.stdout
+    if result.stderr:
+        output += f"\n[stderr]:\n{result.stderr}"
+    if not result.success:
+        return f"Container command failed (exit {result.exit_code}):\n{output}"
     return output if output.strip() else "(no output)"
 
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "secure-cluster-mcp"
-version = "0.2.0"
+version = "1.0.0"
 description = "MCP server for SLURM cluster interactions enabling end-to-end AI-assisted coding workflows"
 readme = "README.md"
 license = "MIT"
@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: System :: Clustering",
 ]
 dependencies = [
-    "fastmcp>=0.4.0",
+    "fastmcp>=2.0.0",
     "paramiko>=3.4.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",

@@ -1,5 +1,10 @@
 # Secure Cluster MCP
 
+[![CI](https://github.com/FlorianSp2000/secure-cluster-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/FlorianSp2000/secure-cluster-mcp/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/secure-cluster-mcp)](https://pypi.org/project/secure-cluster-mcp/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Let AI coding assistants manage your SLURM cluster jobs safely.
 
 Built with [FastMCP](https://github.com/jlowin/fastmcp) for ML researchers who want seamless experiment management through Claude Code or other MCP-compatible agents.
@@ -29,7 +34,7 @@ In `settings.local.json`, auto-allow read-only tools:
 }
 ```
 
-Tools requiring permission (write/execute): `transfer_file`, `download_file`, `submit_job`, `poll_job`, `run_remote_command`
+Tools requiring permission (write/execute): `transfer_file`, `download_file`, `submit_job`, `poll_job`, `run_remote_command`, `singularity_test`
 
 ## Prerequisites
 
@@ -122,6 +127,7 @@ Add to `~/.claude/settings.json` or `.claude/settings.local.json`:
 | `list_remote` | List files with time filtering (mmin/mtime) |
 | `search_logs` | Grep log files with time filtering |
 | `run_remote_command` | Execute command on login node |
+| `singularity_test` | Test container on login node (no GPU, 60s cap) |
 
 ## Prompts
 
