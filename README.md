@@ -52,13 +52,16 @@ Tools requiring permission (write/execute): `transfer_file`, `download_file`, `s
 ## Installation
 
 ```bash
-# From GitHub
-pip install git+https://github.com/FlorianSp2000/secure-cluster-mcp.git
+# From PyPI (recommended)
+uv add secure-cluster-mcp
 
-# Or clone and install locally
+# Or from GitHub
+uv add git+https://github.com/FlorianSp2000/secure-cluster-mcp.git
+
+# Or clone and install locally for development
 git clone https://github.com/FlorianSp2000/secure-cluster-mcp.git
 cd secure-cluster-mcp
-pip install -e .
+uv sync --extra dev
 ```
 
 ## Configuration
