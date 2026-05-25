@@ -93,7 +93,7 @@ LOG_TAIL_LINES=200                # Default lines to read from logs (default: 20
 
 Register the server with the Claude Code CLI. `cluster` is the name Claude Code uses internally — it becomes the tool permission prefix (`mcp__cluster__submit_job`, etc.).
 
-**Installed via PyPI:**
+**Installed as a package (`uv add secure-cluster-mcp`):**
 ```bash
 claude mcp add cluster secure-cluster-mcp
 ```
