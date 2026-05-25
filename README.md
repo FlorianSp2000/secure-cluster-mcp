@@ -91,9 +91,23 @@ LOG_TAIL_LINES=200                # Default lines to read from logs (default: 20
 
 ## Claude Code Integration
 
+Register the server with the Claude Code CLI. `cluster` is the name Claude Code uses internally — it becomes the tool permission prefix (`mcp__cluster__submit_job`, etc.).
+
+**Installed via PyPI:**
+```bash
+claude mcp add cluster secure-cluster-mcp
+```
+
+**From cloned repo (development):**
+```bash
+claude mcp add cluster uv -- --directory /path/to/secure-cluster-mcp run secure-cluster-mcp
+```
+
+<details>
+<summary>Manual JSON config</summary>
+
 Add to `~/.claude/settings.json` or `.claude/settings.local.json`:
 
-**If installed via pip:**
 ```json
 {
   "mcpServers": {
@@ -103,18 +117,7 @@ Add to `~/.claude/settings.json` or `.claude/settings.local.json`:
   }
 }
 ```
-
-**If running from cloned repo (development):**
-```json
-{
-  "mcpServers": {
-    "cluster": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/secure-cluster-mcp", "run", "secure-cluster-mcp"]
-    }
-  }
-}
-```
+</details>
 
 ## Available Tools
 
